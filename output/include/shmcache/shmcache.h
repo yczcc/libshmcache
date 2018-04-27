@@ -149,7 +149,6 @@ parameters:
     value: return the new value
 return error no, 0 for success, != 0 for fail
 */
-
 int shmcache_incr_ex(struct shmcache_context *context,
     const struct shmcache_key_info *key,
     const int64_t increment,

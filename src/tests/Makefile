@@ -1,8 +1,9 @@
 .SUFFIXES: .c .o
 
 COMPILE = $(CC) -g -O1 -Wall -D_FILE_OFFSET_BITS=64 -g -DDEBUG_FLAG
-INC_PATH = -I/usr/include/fastcommon -I/usr/include/shmcache
-LIB_PATH = -lfastcommon -lshmcache -lpthread -ldl
+DENPENDS = ../../output
+INC_PATH = -I$(DENPENDS)/include/fastcommon -I$(DENPENDS)/include/shmcache
+LIB_PATH = $(DENPENDS)/lib64/libfastcommon.a $(DENPENDS)/lib64/libshmcache.a -lm -lpthread
 
 ALL_PRGS = tests
 

@@ -27,7 +27,8 @@ int main(int argc, char *argv[])
 	
 	log_init();
 	g_log_context.log_level = LOG_INFO;
-   
+    log_set_filename("test.log");
+
     printf("sizeof(struct shm_hash_entry): %d\n",
             (int)sizeof(struct shm_hash_entry));
 

@@ -5,7 +5,7 @@
 #include <errno.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <dlfcn.h>
+//#include <dlfcn.h>
 #include <pthread.h>
 #include "logger.h"
 #include "shared_func.h"
@@ -642,7 +642,7 @@ int shmcache_load_config(struct shmcache_config *config,
         if (hash_function == NULL || *hash_function  == '\0') {
             config->hash_func = simple_hash;
         } else {
-            void *handle;
+            /*void *handle;
             handle = dlopen(NULL, RTLD_LAZY);
             if (handle == NULL) {
                 logError("file: "__FILE__", line: %d, "
@@ -660,6 +660,34 @@ int shmcache_load_config(struct shmcache_config *config,
                 break;
             }
             dlclose(handle);
+	    */
+	    /*logDebug("file: "__FILE__", line: %d, hash_function: %s", __LINE__, hash_function);*/
+	    if (0 == strcmp("simple_hash", hash_function)) {
+	        config->hash_func = simple_hash;
+	        logInfo("file: "__FILE__", line: %d, config init hash_function: %s", __LINE__, hash_function);
+	    } else if (0 == strcmp("rs_hash", hash_function)) {
+	        config->hash_func = RSHash;
+	    } else if (0 == strcmp("js_hash", hash_function)) {
+                config->hash_func = JSHash;
+            } else if (0 == strcmp("pjw_hash", hash_function)) {
+                config->hash_func = PJWHash;
+            } else if (0 == strcmp("elf_hash", hash_function)) {
+                config->hash_func = ELFHash;
+            } else if (0 == strcmp("bkdr_hash", hash_function)) {
+                config->hash_func = BKDRHash;
+            } else if (0 == strcmp("sdbm_hash", hash_function)) {
+                config->hash_func = SDBMHash;
+            } else if (0 == strcmp("time33_hash", hash_function)) {
+                config->hash_func = Time33Hash;
+            } else if (0 == strcmp("djb_hash", hash_function)) {
+                config->hash_func = DJBHash;
+            } else if (0 == strcmp("ap_hash", hash_function)) {
+                config->hash_func = APHash;
+            } else {
+	        logError("file: "__FILE__", line: %d, config init fail. hash_function: %s", __LINE__, hash_function);
+		result = ENOENT;
+                break;
+	    }
         }
 
         config->va_policy.avg_key_ttl = iniGetIntValue(NULL,
@@ -774,6 +802,24 @@ int shmcache_set_ex(struct shmcache_context *context,
     return result;
 }
 
+int shmcache_set_ex_not_exist(struct shmcache_context *context,
+    const struct shmcache_key_info *key,
+    const struct shmcache_value_info *value)
+{
+    int result;
+
+    if ((result = shm_lock(context)) != 0) {
+        return result;
+    }
+    context->memory->stats.hashtable.set.total++;
+    result = shm_ht_set_not_exist(context, key, value);
+    if (result == 0) {
+        context->memory->stats.hashtable.set.success++;
+    }
+    shm_unlock(context);
+    return result;
+}
+
 int shmcache_set(struct shmcache_context *context,
         const struct shmcache_key_info *key,
         const char *data, const int data_len, const int ttl)
@@ -786,14 +832,30 @@ int shmcache_set(struct shmcache_context *context,
     return shmcache_set_ex(context, key, &value);
 }
 
+int shmcache_set_not_exist(struct shmcache_context *context,
+    const struct shmcache_key_info *key,
+    const char *data, const int data_len, const int ttl)
+{
+    struct shmcache_value_info value;
+    value.options = SHMCACHE_SERIALIZER_STRING;
+    value.data = (char *)data;
+    value.length = data_len;
+    value.expires = HT_CALC_EXPIRES(get_current_time(), ttl);
+    return shmcache_set_ex_not_exist(context, key, &value);
+}
+
 int shmcache_get(struct shmcache_context *context,
         const struct shmcache_key_info *key,
         struct shmcache_value_info *value)
 {
+    /*logInfo("file: "__FILE__", line: %d, pid:%d, shmcache_get begin. key: %.*s",
+        __LINE__, context->pid, key->length, key->data);*/
     int result;
 
     __sync_add_and_fetch(&context->memory->stats.hashtable.get.total, 1);
     result = shm_ht_get(context, key, value);
+    /*logInfo("file: "__FILE__", line: %d, pid:%d, shmcache_get ing. key: %.*s, result: %d",
+        __LINE__, context->pid, key->length, key->data, result);*/
     if (result == 0) {
         __sync_add_and_fetch(&context->memory->stats.hashtable.get.success, 1);
     }
@@ -843,6 +905,64 @@ int shmcache_set_expires(struct shmcache_context *context,
         return result;
     }
     result = shm_ht_set_expires(context, key, expires);
+    shm_unlock(context);
+    return result;
+}
+
+int shmcache_incr_ex(struct shmcache_context *context,
+    const struct shmcache_key_info *key,
+    const int64_t increment,
+    const int ttl, int64_t *new_value)
+{
+    int result;
+    struct shmcache_value_info value;
+    char *endptr;
+    char buff[24];
+
+    if ((result = shm_lock(context)) != 0) {
+        return result;
+    }
+
+    do {
+        result = shm_ht_get(context, key, &value);
+        if (result == 0) {
+            if (value.length >= sizeof(buff)) {
+                logError("file: "__FILE__", line: %d, "
+                    "key: %.*s, value length: %d exceeds %d",
+                    __LINE__, key->length, key->data,
+                    value.length, (int)sizeof(buff));
+                result = EINVAL;
+                break;
+            }
+            memcpy(buff, value.data, value.length);
+            buff[value.length] = '\0';
+            endptr = NULL;
+            *new_value = strtoll(buff, &endptr, 10);
+            if (endptr != NULL && *endptr != '\0') {
+                logError("file: "__FILE__", line: %d, "
+                    "key: %.*s, value length: %d, "
+                    "value: %s is not a valid integer",
+                    __LINE__, key->length, key->data,
+                    value.length, buff);
+                result = EINVAL;
+                break;
+            }
+            *new_value += increment;
+        } else {
+            *new_value = increment;
+            value.expires = HT_CALC_EXPIRES(get_current_time(), ttl);
+        }
+
+        value.options = SHMCACHE_SERIALIZER_INTEGER;
+        value.data = buff;
+        value.length = sprintf(value.data, "%"PRId64, *new_value);
+        result = shm_ht_set(context, key, &value);
+    } while (0);
+
+    context->memory->stats.hashtable.incr.total++;
+    if (result == 0) {
+        context->memory->stats.hashtable.incr.success++;
+    }
     shm_unlock(context);
     return result;
 }
