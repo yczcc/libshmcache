@@ -87,7 +87,7 @@ int shm_ht_set(struct shmcache_context *context,
     previous = NULL;
     old_entry = NULL;
     found = false;
-    index = HT_GET_BUCKET_INDEX(context, key);
+    index = HT_GET_BUCKET_INDEX(context, key); // hash函数生成key索引
     old_offset = context->memory->hashtable.buckets[index];
     while (old_offset > 0) {
         old_entry = shm_get_hentry_ptr(context, old_offset);
