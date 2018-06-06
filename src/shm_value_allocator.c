@@ -114,8 +114,7 @@ int shm_value_allocator_recycle(struct shmcache_context *context,
     start_time = get_current_time_us();
     g_current_time = start_time / 1000000;
     recycled = false;
-    entry_offset = shm_list_first(context);
-    while (entry_offset > 0) {
+    while ((entry_offset = shm_list_first(context)) > 0) {
         entry = shm_get_hentry_ptr(context, entry_offset);
         index = entry->memory.index.striping;
 #if __YCZCC_TEST__
@@ -130,27 +129,16 @@ int shm_value_allocator_recycle(struct shmcache_context *context,
         key.data = entry->key;
         key.length = entry->key_len;
         valid = HT_ENTRY_IS_VALID(entry, g_current_time);
+        if (shm_ht_delete_ex(context, &key, &recycled) != 0) {
+            logError("file: "__FILE__", line: %d, "
+                "shm_ht_delete fail, index: %d, "
+                "entry offset: %"PRId64", "
+                "key: %.*s, key length: %d", __LINE__,
+                index, entry_offset, entry->key_len,
+                entry->key, entry->key_len);
 
-        if (valid) {
-            // todo: add by yczcc
-            entry_offset = shm_list_next(context, entry_offset);
-            continue;
-        } else {
-            int64_t entry_offset_temp = entry_offset;
-            entry_offset_temp = shm_list_next(context, entry_offset_temp);
-            if (shm_ht_delete_ex(context, &key, &recycled) != 0) {
-                logError("file: "__FILE__", line: %d, "
-                    "shm_ht_delete fail, index: %d, "
-                    "entry offset: %"PRId64", "
-                    "key: %.*s, key length: %d", __LINE__,
-                    index, entry_offset, entry->key_len,
-                    entry->key, entry->key_len);
-
-                shm_ht_free_entry(context, entry, entry_offset, &recycled);
-            }
-            entry_offset = entry_offset_temp;
+            shm_ht_free_entry(context, entry, entry_offset, &recycled);
         }
-
         clear_count++;
 #if __YCZCC_TEST__
         logDebug("file: "__FILE__", line: %d, pid:%d, delete key begin. entry_offset: %ld, key: %.*s, valid: %d, clear_count: %d",
@@ -178,11 +166,6 @@ int shm_value_allocator_recycle(struct shmcache_context *context,
             result = 0;
             break;
         }
-    }
-
-    if (clear_count > 0) {
-        // todo: add by yczcc
-        result = 0;
     }
 
     context->memory->stats.memory.clear_ht_entry.total += clear_count;
