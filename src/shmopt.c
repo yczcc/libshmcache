@@ -105,9 +105,10 @@ int shmopt_create_value_segment(struct shmcache_context *context)
     context->memory->usage.alloced += context->memory->vm_info.segment.size;
 
     logInfo("file: "__FILE__", line: %d, pid: %d, "
-            "create value segment #%d, size: %"PRId64,
+            "create value segment #%d, size: %"PRId64", current: %d, max: %d",
             __LINE__, context->pid, segment_index + 1,
-            context->memory->vm_info.segment.size);
+            context->memory->vm_info.segment.size, context->memory->vm_info.segment.count.current,
+            context->memory->vm_info.segment.count.max);
 
     return 0;
 }

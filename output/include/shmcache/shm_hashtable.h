@@ -13,6 +13,7 @@
 #include "shmcache_types.h"
 #include "shm_list.h"
 #include "shm_value_allocator.h"
+#include "shmcache_def.h"
 
 #define HT_CALC_EXPIRES(current_time, ttl) \
     (ttl == SHMCACHE_NEVER_EXPIRED ? 0 : current_time + ttl)

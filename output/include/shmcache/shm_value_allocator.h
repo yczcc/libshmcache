@@ -10,6 +10,7 @@
 #include "common_define.h"
 #include "shmcache_types.h"
 #include "shmopt.h"
+#include "shmcache_def.h"
 
 #ifdef __cplusplus
 extern "C" {

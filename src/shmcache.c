@@ -848,14 +848,16 @@ int shmcache_get(struct shmcache_context *context,
         const struct shmcache_key_info *key,
         struct shmcache_value_info *value)
 {
-    /*logInfo("file: "__FILE__", line: %d, pid:%d, shmcache_get begin. key: %.*s",
+    /*logDebug("file: "__FILE__", line: %d, pid:%d, shmcache_get begin. key: %.*s",
         __LINE__, context->pid, key->length, key->data);*/
     int result;
 
     __sync_add_and_fetch(&context->memory->stats.hashtable.get.total, 1);
     result = shm_ht_get(context, key, value);
-    /*logInfo("file: "__FILE__", line: %d, pid:%d, shmcache_get ing. key: %.*s, result: %d",
-        __LINE__, context->pid, key->length, key->data, result);*/
+#if __YCZCC_TEST__
+    logDebug("file: "__FILE__", line: %d, pid:%d, shmcache_get ing. key: %.*s, result: %d",
+        __LINE__, context->pid, key->length, key->data, result);
+#endif
     if (result == 0) {
         __sync_add_and_fetch(&context->memory->stats.hashtable.get.success, 1);
     }

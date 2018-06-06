@@ -114,25 +114,51 @@ int shm_value_allocator_recycle(struct shmcache_context *context,
     start_time = get_current_time_us();
     g_current_time = start_time / 1000000;
     recycled = false;
-    while ((entry_offset=shm_list_first(context)) > 0) {
+    entry_offset = shm_list_first(context);
+    while (entry_offset > 0) {
         entry = shm_get_hentry_ptr(context, entry_offset);
         index = entry->memory.index.striping;
+#if __YCZCC_TEST__
+        /*int64_t entry_offset_temp = entry_offset;
+        while (entry_offset_temp > 0) {
+        struct shm_hash_entry * entry_temp = shm_get_hentry_ptr(context, entry_offset_temp);
+        logDebug("file: "__FILE__", line: %d, pid:%d, get key begin. entry_offset: %ld, key: %.*s, ht_next: %ld",
+        __LINE__, context->pid, entry_offset_temp, entry_temp->key_len, entry_temp->key, entry_temp->ht_next);
+        entry_offset_temp = entry_temp->ht_next;
+        }*/
+#endif
         key.data = entry->key;
         key.length = entry->key_len;
         valid = HT_ENTRY_IS_VALID(entry, g_current_time);
-        if (shm_ht_delete_ex(context, &key, &recycled) != 0) {
-            logError("file: "__FILE__", line: %d, "
+
+        if (valid) {
+            // todo: add by yczcc
+            entry_offset = shm_list_next(context, entry_offset);
+            continue;
+        } else {
+            int64_t entry_offset_temp = entry_offset;
+            entry_offset_temp = shm_list_next(context, entry_offset_temp);
+            if (shm_ht_delete_ex(context, &key, &recycled) != 0) {
+                logError("file: "__FILE__", line: %d, "
                     "shm_ht_delete fail, index: %d, "
                     "entry offset: %"PRId64", "
                     "key: %.*s, key length: %d", __LINE__,
                     index, entry_offset, entry->key_len,
                     entry->key, entry->key_len);
 
-            shm_ht_free_entry(context, entry, entry_offset, &recycled);
+                shm_ht_free_entry(context, entry, entry_offset, &recycled);
+            }
+            entry_offset = entry_offset_temp;
         }
 
         clear_count++;
+#if __YCZCC_TEST__
+        logDebug("file: "__FILE__", line: %d, pid:%d, delete key begin. entry_offset: %ld, key: %.*s, valid: %d, clear_count: %d",
+            __LINE__, context->pid, entry_offset, key.length, key.data, valid, clear_count);
+#endif
         if (valid) {
+            logInfo("file: "__FILE__", line: %d, pid:%d, clear valid key ing. key: %.*s, recycled: %d",
+                __LINE__, context->pid, key.length, key.data, recycled);
             valid_count++;
         }
 
@@ -152,6 +178,11 @@ int shm_value_allocator_recycle(struct shmcache_context *context,
             result = 0;
             break;
         }
+    }
+
+    if (clear_count > 0) {
+        // todo: add by yczcc
+        result = 0;
     }
 
     context->memory->stats.memory.clear_ht_entry.total += clear_count;
@@ -200,8 +231,14 @@ struct shm_hash_entry *shm_value_allocator_alloc(struct shmcache_context *contex
     }
 
     if (context->memory->vm_info.segment.count.current >=
-            context->memory->vm_info.segment.count.max)
-    {
+            context->memory->vm_info.segment.count.max) {
+#if __YCZCC_TEST__
+        logInfo("file: "__FILE__", line: %d, pid:%d, need recycle. segment{count{current: %d, max: %d}, size: %ld}, "
+            "memory{size: %d, status: %d, max_key_count: %d}",
+            __LINE__, context->pid, context->memory->vm_info.segment.count.current,
+            context->memory->vm_info.segment.count.max, context->memory->vm_info.segment.size,
+            context->memory->size, context->memory->status, context->memory->max_key_count);
+#endif
         recycle = true;
     } else {
         allocator_offset = shm_object_pool_first(&context->value_allocator.done);

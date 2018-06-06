@@ -9,6 +9,7 @@
 #include <pthread.h>
 #include "common_define.h"
 #include "shmcache_types.h"
+#include "shmcache_def.h"
 
 #ifdef __cplusplus
 extern "C" {

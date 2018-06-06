@@ -128,6 +128,12 @@ int shm_ht_set(struct shmcache_context *context,
     context->memory->usage.used.key += new_entry->key_len;
     shm_list_add_tail(context, new_offset);
 
+#if __YCZCC_TEST__
+    logDebug("file: "__FILE__", line: %d, "
+        "set new key, index: %u, new_offset: %ld, ht_next: %ld, key: %.*s, memory{hashtable.count: %d}, segment{count.current: %d, count.max: %d}", __LINE__,
+        index, new_offset, new_entry->ht_next, key->length, key->data, context->memory->hashtable.count,
+        context->memory->vm_info.segment.count.current, context->memory->vm_info.segment.count.max);
+#endif
     return 0;
 }
 
@@ -219,6 +225,12 @@ int shm_ht_set_not_exist(struct shmcache_context *context,
     context->memory->usage.used.key += new_entry->key_len;
     shm_list_add_tail(context, new_offset);
 
+#if __YCZCC_TEST__
+    logDebug("file: "__FILE__", line: %d, "
+        "set new key, index: %u, new_offset: %ld, key: %.*s, memory{hashtable.count: %d}, segment{count.current: %d, count.max: %d}", __LINE__,
+        index, new_offset, key->length, key->data, context->memory->hashtable.count,
+        context->memory->vm_info.segment.count.current, context->memory->vm_info.segment.count.max);
+#endif
     return 0;
 }
 
@@ -229,10 +241,17 @@ int shm_ht_get(struct shmcache_context *context,
     unsigned int index;
     int64_t entry_offset;
     struct shm_hash_entry *entry;
-    /*logInfo("file: "__FILE__", line: %d, pid:%d, shm_ht_get begin. key: %.*s",
-        __LINE__, context->pid, key->length, key->data);*/
     index = HT_GET_BUCKET_INDEX(context, key);
     entry_offset = context->memory->hashtable.buckets[index];
+#if __YCZCC_TEST__
+    /*logDebug("file: "__FILE__", line: %d, pid:%d, shm_ht_get begin. key: %.*s, index: %u, entry_offset: %ld,"
+        " capacity: %d, count: %d",
+        __LINE__, context->pid, key->length, key->data, index, entry_offset,
+        context->memory->hashtable.capacity, context->memory->hashtable.count);*/
+    int offset_count = 0;
+#endif
+
+    
     while (entry_offset > 0) {
         entry = shm_get_hentry_ptr(context, entry_offset);
         if (HT_KEY_EQUALS(entry, key)) {
@@ -240,9 +259,11 @@ int shm_ht_get(struct shmcache_context *context,
             value->length = entry->value.length;
             value->options = entry->value.options;
             value->expires = entry->expires;
-            /*logInfo("file: "__FILE__", line: %d, pid:%d, shm_ht_get ing."
+#if __YCZCC_TEST__
+            logDebug("file: "__FILE__", line: %d, pid:%d, shm_ht_get ing."
                 "key: %.*s, value: %.*s, value expires: %u",
-                __LINE__, context->pid, key->length, key->data, value->length, value->data, value->expires);*/
+                __LINE__, context->pid, key->length, key->data, value->length, value->data, value->expires);
+#endif
             if (HT_ENTRY_IS_VALID(entry, get_current_time())) {
                 return 0;
             } else {
@@ -251,6 +272,15 @@ int shm_ht_get(struct shmcache_context *context,
         }
 
         entry_offset = entry->ht_next;
+        
+#if __YCZCC_TEST__
+        offset_count++;
+        /*logDebug("file: "__FILE__", line: %d, pid:%d, shm_ht_get ing. key: %.*s, index: %u, entry_offset: %ld,"
+            " capacity: %d, count: %d, offset_count: %d, entry.key: %.*s, entry.expires: %u",
+            __LINE__, context->pid, key->length, key->data, index, entry_offset,
+            context->memory->hashtable.capacity, context->memory->hashtable.count, offset_count,
+            entry->key_len, entry->key, entry->expires);*/
+#endif
     }
 
     return ENOENT;
@@ -281,8 +311,16 @@ int shm_ht_delete_ex(struct shmcache_context *context,
     result = ENOENT;
     index = HT_GET_BUCKET_INDEX(context, key);
     entry_offset = context->memory->hashtable.buckets[index];
+#if __YCZCC_TEST__
+    logDebug("file: "__FILE__", line: %d, pid:%d, delete key begin. entry_offset: %ld, key: %.*s, index: %u",
+        __LINE__, context->pid, entry_offset, key->length, key->data, index);
+#endif
     while (entry_offset > 0) {
         entry = shm_get_hentry_ptr(context, entry_offset);
+#if __YCZCC_TEST__
+        logDebug("file: "__FILE__", line: %d, pid:%d, delete key ing. entry_offset: %ld, key: %.*s, entry.key: %.*s",
+            __LINE__, context->pid, entry_offset, key->length, key->data, entry->key_len, entry->key);
+#endif
         if (HT_KEY_EQUALS(entry, key)) {
             if (previous != NULL) {
                 previous->ht_next = entry->ht_next;

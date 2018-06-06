@@ -135,8 +135,8 @@ struct shm_object_pool_info {
 
 struct shm_hashtable {
     struct shm_list head; //for recycle
-    int capacity;
-    int count;
+    int capacity; // 哈希表容量
+    int count; // 
     int64_t buckets[0]; //entry offset
 };
 

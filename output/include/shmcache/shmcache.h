@@ -12,6 +12,7 @@
 #include "common_define.h"
 #include "shmcache_types.h"
 #include "shm_hashtable.h"
+#include "shmcache_def.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -149,6 +150,7 @@ parameters:
     value: return the new value
 return error no, 0 for success, != 0 for fail
 */
+
 int shmcache_incr_ex(struct shmcache_context *context,
     const struct shmcache_key_info *key,
     const int64_t increment,
