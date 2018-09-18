@@ -7,10 +7,10 @@
 #include <fcntl.h>
 //#include <dlfcn.h>
 #include <pthread.h>
-#include "logger.h"
-#include "shared_func.h"
-#include "ini_file_reader.h"
-#include "sched_thread.h"
+#include "fastcommon/logger.h"
+#include "fastcommon/shared_func.h"
+#include "fastcommon/ini_file_reader.h"
+#include "fastcommon/sched_thread.h"
 #include "shm_object_pool.h"
 #include "shm_striping_allocator.h"
 #include "shm_op_wrapper.h"
@@ -579,10 +579,18 @@ int shmcache_load_config(struct shmcache_config *config,
 
     do {
         type = iniGetStrValue(NULL, "type", &iniContext);
-        if (type == NULL || strcasecmp(type, "shm") == 0) {
-            config->type = SHMCACHE_TYPE_SHM;
-        } else {
+        if (type == NULL) {
             config->type = SHMCACHE_TYPE_MMAP;
+        } else if (strcasecmp(type, "shm") == 0) {
+            config->type = SHMCACHE_TYPE_SHM;
+        } else if (strcasecmp(type, "mmap") == 0) {
+            config->type = SHMCACHE_TYPE_MMAP;
+        } else {
+            logError("file: "__FILE__", line: %d, "
+                    "config file: %s, invalid type: %s",
+                    __LINE__, config_filename, type);
+            result = EINVAL;
+            break;
         }
 
         filename = iniGetStrValue(NULL, "filename", &iniContext);
@@ -734,6 +742,9 @@ int shmcache_load_config(struct shmcache_config *config,
         if (config->recycle_key_once <= 0) {
             config->recycle_key_once = -1;
         }
+        config->recycle_valid_entries = iniGetBoolValue(NULL,
+                "recycle_valid_entries", &iniContext, false);
+
         load_log_level(&iniContext);
     } while (0);
 
@@ -1105,10 +1116,12 @@ const char *shmcache_get_serializer_label(const int serializer)
     switch (serializer) {
         case SHMCACHE_SERIALIZER_STRING:
             return "string";
+        case SHMCACHE_SERIALIZER_LIST:
+            return "list";
+        case SHMCACHE_SERIALIZER_MAP:
+            return "map";
         case SHMCACHE_SERIALIZER_INTEGER:
             return "integer";
-        case SHMCACHE_SERIALIZER_NONE:
-            return "none";
         case SHMCACHE_SERIALIZER_MSGPACK:
             return "msgpack";
         case SHMCACHE_SERIALIZER_IGBINARY:

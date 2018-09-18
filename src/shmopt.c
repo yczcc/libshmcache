@@ -2,7 +2,7 @@
 
 #include <errno.h>
 #include <pthread.h>
-#include "logger.h"
+#include "fastcommon/logger.h"
 #include "shm_op_wrapper.h"
 #include "shm_striping_allocator.h"
 #include "shm_object_pool.h"
@@ -105,10 +105,9 @@ int shmopt_create_value_segment(struct shmcache_context *context)
     context->memory->usage.alloced += context->memory->vm_info.segment.size;
 
     logInfo("file: "__FILE__", line: %d, pid: %d, "
-            "create value segment #%d, size: %"PRId64", current: %d, max: %d",
+            "create value segment #%d, size: %"PRId64,
             __LINE__, context->pid, segment_index + 1,
-            context->memory->vm_info.segment.size, context->memory->vm_info.segment.count.current,
-            context->memory->vm_info.segment.count.max);
+            context->memory->vm_info.segment.size);
 
     return 0;
 }

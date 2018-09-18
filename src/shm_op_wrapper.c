@@ -7,8 +7,8 @@
 #include <sys/shm.h>
 #include <sys/mman.h>
 #include <fcntl.h>
-#include "logger.h"
-#include "shared_func.h"
+#include "fastcommon/logger.h"
+#include "fastcommon/shared_func.h"
 #include "shm_op_wrapper.h"
 
 #define SHM_GET_MMAP_FILENAME(true_filename, filename, proj_id) \
@@ -113,9 +113,9 @@ void *shm_do_shmmap(const key_t key, const int64_t size,
     if (shmid < 0) {
         *err_no = errno != 0 ? errno : EPERM;
         logError("file: "__FILE__", line: %d, "
-            "shmget with key %08x fail, size: %ld, create_segment: %d, "
-            "errno: %d, error info: %s", __LINE__,
-            key, size, create_segment, *err_no, strerror(*err_no));
+                "shmget with key %08x fail, "
+                "errno: %d, error info: %s", __LINE__,
+                key, *err_no, strerror(*err_no));
         return NULL;
     }
 
@@ -123,9 +123,9 @@ void *shm_do_shmmap(const key_t key, const int64_t size,
     if (addr == NULL || addr == (void *)-1) {
         *err_no = errno != 0 ? errno : EPERM;
         logError("file: "__FILE__", line: %d, "
-                "shmat with key %08x fail, size: %ld, create_segment: %d, "
+                "shmat with key %08x fail, "
                 "errno: %d, error info: %s", __LINE__,
-                key, size, create_segment, *err_no, strerror(*err_no));
+                key, *err_no, strerror(*err_no));
         return NULL;
     }
     *err_no = 0;

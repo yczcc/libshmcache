@@ -6,7 +6,7 @@ libshmcache is a local share memory cache for multi processes.
 it is a high performance library because read mechanism is lockless.
 libshmcache is 100+ times faster than a remote interface such as redis.
 
-this project contains C library and a PHP extension.
+this project contains C library, PHP extension and Java JNI wrapper.
 
 Its high performance features include:
   * pthread mutex lock on write, read is lockless
@@ -33,7 +33,7 @@ other features are:
   * provide abundant stats info: counters for set, get and delete,
     memory recycle stats, lock stats etc.
   * support atomic increment
-  * PHP extension support multiple serializers: igbinary, msgpack, php and NONE.
+  * PHP extension support multiple serializers: igbinary, msgpack, php.
     these serializers can coexist in a share memory.
 
 utility commands in directory: src/tools, in /usr/bin/ after make && make install
@@ -55,7 +55,6 @@ ShmCache::__construct(string $config_filename[, long $serializer =
       ShmCache::SERIALIZER_IGBINARY for igbinary, the default serializer
       ShmCache::SERIALIZER_MSGPACK for msgpack
       ShmCache::SERIALIZER_PHP for php serializer
-      ShmCache::SERIALIZER_NONE only support string variable
     </pre>
   * @throws ShmCacheException if the serializer not enabled
   * @example: $cache = new ShmCache("/etc/libshmcache.conf");

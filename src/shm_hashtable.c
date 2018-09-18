@@ -2,9 +2,9 @@
 
 #include <errno.h>
 #include <pthread.h>
-#include "logger.h"
-#include "shared_func.h"
-#include "sched_thread.h"
+#include "fastcommon/logger.h"
+#include "fastcommon/shared_func.h"
+#include "fastcommon/sched_thread.h"
 #include "shmopt.h"
 #include "shm_lock.h"
 #include "shm_object_pool.h"
@@ -87,7 +87,7 @@ int shm_ht_set(struct shmcache_context *context,
     previous = NULL;
     old_entry = NULL;
     found = false;
-    index = HT_GET_BUCKET_INDEX(context, key); // hash鍑芥暟鐢熸垚key绱㈠紩
+    index = HT_GET_BUCKET_INDEX(context, key); // hash函数生成key索引
     old_offset = context->memory->hashtable.buckets[index];
     while (old_offset > 0) {
         old_entry = shm_get_hentry_ptr(context, old_offset);
@@ -402,4 +402,158 @@ int shm_ht_clear(struct shmcache_context *context)
             "clear hashtable, %d entries be cleared!",
             __LINE__, context->pid, ht_count);
     return ht_count;
+}
+
+static bool shm_ht_match_key(struct shmcache_match_key_info *key_info,
+        struct shm_hash_entry *entry)
+{
+    int loop;
+    int start;
+
+    if (entry->key_len < key_info->length) {
+        return false;
+    }
+    switch (key_info->op_type) {
+        case SHMCACHE_MATCH_KEY_OP_EXACT:
+            return key_info->length == entry->key_len &&
+                memcmp(key_info->key, entry->key, key_info->length) == 0;
+        case SHMCACHE_MATCH_KEY_OP_LEFT:
+            return memcmp(key_info->key, entry->key, key_info->length) == 0;
+        case SHMCACHE_MATCH_KEY_OP_RIGHT:
+            return memcmp(key_info->key, entry->key +
+                    (entry->key_len - key_info->length), key_info->length) == 0;
+        case SHMCACHE_MATCH_KEY_OP_ANYWHERE:
+            loop = entry->key_len - key_info->length + 1;
+            for (start=0; start<loop; start++) {
+                if (memcmp(key_info->key, entry->key + start,
+                            key_info->length) == 0)
+                {
+                    return true;
+                }
+            }
+            return false;
+        default:
+            return false;
+    }
+}
+
+#define HT_KEY_MATCHED(key_info, entry) \
+    (key_info == NULL || shm_ht_match_key(key_info, entry))
+
+int shm_ht_to_array_ex(struct shmcache_context *context,
+        struct shmcache_hentry_array *array,
+        struct shmcache_match_key_info *key_info,
+        const int offset, const int count)
+{
+    int64_t entry_offset;
+    struct shm_hash_entry *src;
+    struct shmcache_hash_entry *dest;
+    char *value_data;
+    int row_count;
+    int i;
+    int bytes;
+    int current_time;
+
+    if (offset < 0) {
+        logError("file: "__FILE__", line: %d, "
+                "invalid offset: %d", __LINE__, offset);
+        array->count = 0;
+        array->entries = NULL;
+        return EINVAL;
+    }
+
+    row_count = context->memory->hashtable.count - offset;
+    if (count > 0 && count < row_count) {
+        row_count = count;
+    }
+
+    if (row_count <= 0) {
+        array->count = 0;
+        array->entries = NULL;
+        return 0;
+    }
+
+    bytes = sizeof(struct shmcache_hash_entry) * row_count;
+    array->entries = (struct shmcache_hash_entry *)malloc(bytes);
+    if (array->entries == NULL) {
+        logError("file: "__FILE__", line: %d, "
+                "malloc %d bytes fail", __LINE__, bytes);
+        array->count = 0;
+        return ENOMEM;
+    }
+
+    current_time = time(NULL);
+    i = 0;
+    entry_offset = shm_list_first(context);
+    while (entry_offset > 0 && i < offset) {
+        src = shm_get_hentry_ptr(context, entry_offset);
+        if (HT_ENTRY_IS_VALID(src, current_time) &&
+                HT_KEY_MATCHED(key_info, src))
+        {
+            ++i;
+        }
+        entry_offset = shm_list_next(context, entry_offset);
+    }
+
+    memset(array->entries, 0, bytes);
+    array->count = 0;
+    dest = array->entries;
+
+    while (entry_offset > 0) {
+        src = shm_get_hentry_ptr(context, entry_offset);
+        if (!(HT_ENTRY_IS_VALID(src, current_time) &&
+                    HT_KEY_MATCHED(key_info, src)))
+        {
+            entry_offset = shm_list_next(context, entry_offset);
+            continue;
+        }
+
+        bytes = src->key_len + src->value.length;
+        dest->key.data = (char *)malloc(bytes);
+        if (dest->key.data == NULL) {
+            logError("file: "__FILE__", line: %d, "
+                    "malloc %d bytes fail", __LINE__, bytes);
+            shm_ht_free_array(array);
+            return ENOMEM;
+        }
+
+        dest->key.length = src->key_len;
+        memcpy(dest->key.data, src->key, src->key_len);
+
+        value_data = shm_get_value_ptr(context, src);
+        dest->value.length = src->value.length;
+        dest->value.options = src->value.options;
+        dest->value.expires = src->expires;
+
+        dest->value.data = dest->key.data + src->key_len;
+        memcpy(dest->value.data, value_data, src->value.length);
+
+        entry_offset = shm_list_next(context, entry_offset);
+        dest++;
+        array->count++;
+        if (array->count == row_count) {
+            break;
+        }
+    }
+
+    return 0;
+}
+
+void shm_ht_free_array(struct shmcache_hentry_array *array)
+{
+    struct shmcache_hash_entry *entry;
+    struct shmcache_hash_entry *end;
+
+    if (array->entries == NULL) {
+        return;
+    }
+
+    end = array->entries + array->count;
+    for (entry=array->entries; entry<end; entry++) {
+        free(entry->key.data);
+    }
+
+    free(array->entries);
+    array->entries = NULL;
+    array->count = 0;
 }

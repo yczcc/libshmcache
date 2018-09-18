@@ -9,12 +9,12 @@
 #include <time.h>
 #include <pthread.h>
 #include <sys/shm.h>
-#include "hash.h"
-#include "common_define.h"
+#include "fastcommon/common_define.h"
+#include "fastcommon/hash.h"
 
 #define SHMCACHE_MAJOR_VERSION  1
 #define SHMCACHE_MINOR_VERSION  0
-#define SHMCACHE_PATCH_VERSION  5
+#define SHMCACHE_PATCH_VERSION  6
 
 #define SHMCACHE_MAX_KEY_SIZE  64
 
@@ -26,9 +26,10 @@
 
 #define SHMCACHE_NEVER_EXPIRED  0
 
-#define SHMCACHE_SERIALIZER_STRING    0   //string type
-#define SHMCACHE_SERIALIZER_INTEGER   1   //integer type
-#define SHMCACHE_SERIALIZER_NONE      0x100
+#define SHMCACHE_SERIALIZER_STRING    0x1   //string type
+#define SHMCACHE_SERIALIZER_LIST      (SHMCACHE_SERIALIZER_STRING | 0x2)   //list
+#define SHMCACHE_SERIALIZER_MAP       (SHMCACHE_SERIALIZER_STRING | 0x4)   //map
+#define SHMCACHE_SERIALIZER_INTEGER   (SHMCACHE_SERIALIZER_STRING | 0x8)   //integer type
 #define SHMCACHE_SERIALIZER_IGBINARY  0x200
 #define SHMCACHE_SERIALIZER_MSGPACK   0x400
 #define SHMCACHE_SERIALIZER_PHP       0x800
@@ -46,6 +47,8 @@ struct shmcache_config {
     int type;  //shm or mmap
 
     int recycle_key_once;  //recycle key number once when reach max keys
+
+    bool recycle_valid_entries;  //if recycle valid entries by FIFO
 
     struct {
         /* avg. key TTL threshold for recycling memory
@@ -135,7 +138,7 @@ struct shm_object_pool_info {
 
 struct shm_hashtable {
     struct shm_list head; //for recycle
-    int capacity; // ÂìàÂ∏åË°®ÂÆπÈáè
+    int capacity; // π˛œ£±Ì»›¡ø
     int count; // 
     int64_t buckets[0]; //entry offset
 };
@@ -264,6 +267,16 @@ struct shmcache_value_info {
     int length;
     int options;    //options for application
     time_t expires; //expire time
+};
+
+struct shmcache_hash_entry {
+    struct shmcache_key_info key;
+    struct shmcache_value_info value;
+};
+
+struct shmcache_hentry_array {
+    struct shmcache_hash_entry *entries;
+    int count;
 };
 
 struct shmcache_segment_info {
